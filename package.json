@@ -1,0 +1,23 @@
+{
+  "name": "pluralight",
+  "module": "src/index.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.esm.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "release": "npx bumpp --commit --push --tag --recursive"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "tsup": "8.3.6"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
