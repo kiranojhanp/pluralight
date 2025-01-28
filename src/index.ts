@@ -1,71 +1,94 @@
-// ========================
-// CORE PLURALIZER CLASS
-
 import {
   IRREGULAR_PAIRS,
   PLURAL_RULES,
   SINGULAR_RULES,
-  STARTS_WITH_CAPITAL,
   UNCOUNTABLE_RULES,
-} from "./constants";
+} from "./rules";
 
-// ========================
+const STARTS_WITH_CAPITAL = /^[A-Z]/;
+
 export class Pluralizer {
-  // ========================
-  // INSTANCE PROPERTIES
-  // ========================
-  private irregulars = new Map<string, string>();
-  private uncountables = new Set<string>();
-  private pluralRules: Array<[RegExp, string]> = [];
-  private singularRules: Array<[RegExp, string]> = [];
+  private readonly irregulars = new Map<string, string>();
+  private readonly uncountables = new Set<string>();
+  private readonly pluralRules: Array<[RegExp, string]> = [];
+  private readonly singularRules: Array<[RegExp, string]> = [];
 
-  // ========================
-  // PUBLIC API
-  // ========================
   constructor() {
     this.loadDefaultRules();
   }
 
   /** Convert word to plural form */
   plural(word: string): string {
+    if (!word) throw new Error("Word cannot be empty");
     return this.processWord(word, this.pluralRules, this.irregulars);
   }
 
   /** Convert word to singular form */
   singular(word: string): string {
-    return this.processWord(
-      word,
-      this.singularRules,
-      new Map([...this.irregulars].reverse())
+    if (!word) throw new Error("Word cannot be empty");
+
+    const reversedMap = new Map(
+      Array.from(this.irregulars.entries()).map(([k, v]) => [v, k])
     );
+
+    return this.processWord(word, this.singularRules, reversedMap);
   }
 
-  // ========================
-  // RULE MANAGEMENT
-  // ========================
-  addPluralRule(pattern: RegExp, replacement: string): void {
-    this.pluralRules.push([pattern, replacement]);
+  /**
+   * Pluralize or singularize a word based on the count.
+   */
+  pluralize(word: string, count: number, inclusive = false): string {
+    if (!word) throw new Error("Word cannot be empty");
+    if (typeof count !== "number") throw new Error("Count must be a number");
+
+    const result = count === 1 ? this.singular(word) : this.plural(word);
+    return inclusive ? `${count} ${result}` : result;
   }
 
-  addSingularRule(pattern: RegExp, replacement: string): void {
-    this.singularRules.push([pattern, replacement]);
+  addPluralRule(rule: string | RegExp, replacement: string): void {
+    if (rule === undefined || rule === null)
+      throw new Error("Rule cannot be null");
+    if (replacement === undefined || replacement === null)
+      throw new Error("Replacement cannot be null");
+    this.pluralRules.unshift([this.sanitizeRule(rule), replacement]);
   }
 
-  addUncountable(word: string): void {
+  addSingularRule(rule: string | RegExp, replacement: string): void {
+    if (rule === undefined || rule === null)
+      throw new Error("Rule cannot be null");
+    if (replacement === undefined || replacement === null)
+      throw new Error("Replacement cannot be null");
+    this.singularRules.unshift([this.sanitizeRule(rule), replacement]);
+  }
+
+  private sanitizeRule(rule: string | RegExp): RegExp {
+    try {
+      if (typeof rule === "string") {
+        return new RegExp("^" + rule + "$", "i");
+      }
+      return new RegExp(rule, rule.flags);
+    } catch (error: any) {
+      throw new Error(`Invalid rule pattern: ${error.message}`);
+    }
+  }
+
+  addUncountable(word: RegExp | string): void {
+    if (!word) throw new Error("Word cannot be empty");
+
+    if (typeof word !== "string") {
+      this.addPluralRule(word, "$0");
+      this.addSingularRule(word, "$0");
+      return;
+    }
+
     this.uncountables.add(word.toLowerCase());
   }
 
   addIrregular(single: string, plural: string): void {
+    if (!single || !plural) throw new Error("Words cannot be empty");
     this.irregulars.set(single.toLowerCase(), plural.toLowerCase());
   }
 
-  // ========================
-  // CORE LOGIC
-  // ========================
-  /**
-   * Main word processing pipeline
-   * @param inverseMap When checking singular, we reverse the irregulars map
-   */
   private processWord(
     word: string,
     rules: Array<[RegExp, string]>,
@@ -73,77 +96,44 @@ export class Pluralizer {
   ): string {
     const lowerWord = word.toLowerCase();
 
+    // Check uncountables first (fastest lookup)
     if (this.uncountables.has(lowerWord)) return word;
 
+    // Check irregulars next (map lookup)
     const irregularMatch = inverseMap.get(lowerWord);
     if (irregularMatch) return this.restoreCase(word, irregularMatch);
 
+    // Finally check regex patterns
     for (const [pattern, replacement] of rules) {
-      const result = this.applyRule(word, pattern, replacement);
-      if (result !== word) return result;
+      if (pattern.test(word)) {
+        const result = word.replace(pattern, replacement);
+        if (result !== word) return this.restoreCase(word, result);
+      }
     }
 
     return word;
   }
 
-  /** Preserve original word casing in transformed word */
   private restoreCase(original: string, transformed: string): string {
+    if (!transformed) return original;
+
     if (original === original.toLowerCase()) return transformed.toLowerCase();
     if (original === original.toUpperCase()) return transformed.toUpperCase();
     if (STARTS_WITH_CAPITAL.test(original)) {
-      return transformed[0].toUpperCase() + transformed.slice(1).toLowerCase();
+      return (
+        transformed.charAt(0).toUpperCase() + transformed.slice(1).toLowerCase()
+      );
     }
     return transformed.toLowerCase();
   }
 
-  /**
-   * Replaces placeholders ($1, $2, etc.) in a string with corresponding match groups
-   * @example replacePlaceholders("Hello $1", ["World", "Unused"]) → "Hello World"
-   */
-  private replacePlaceholders(
-    template: string,
-    matches: RegExpMatchArray
-  ): string {
-    let result = template;
-    for (let i = 1; i < matches.length; i++) {
-      const placeholder = new RegExp(`\\$${i}`, "g");
-      result = result.replace(placeholder, matches[i] || "");
-    }
-    return result;
-  }
-
-  /** Apply regex replacement with capture group support */
-  private applyRule(
-    word: string,
-    pattern: RegExp,
-    replacement: string
-  ): string {
-    const match = word.match(pattern);
-    if (!match) return word;
-
-    let result = replacement;
-    for (let i = 1; i < match.length; i++) {
-      result = this.replacePlaceholders(result, match);
-    }
-
-    return this.restoreCase(match[0], result);
-  }
-
-  // ========================
-  // DEFAULT RULES
-  // ========================
   private loadDefaultRules(): void {
-    // Load all defaults
-    IRREGULAR_PAIRS.forEach(([s, p]) => this.addIrregular(s, p));
-    PLURAL_RULES.forEach(([p, r]) => this.addPluralRule(p, r));
-    SINGULAR_RULES.forEach(([p, r]) => this.addSingularRule(p, r));
-
-    // Common uncountables
+    // Load rules in reverse priority order
     UNCOUNTABLE_RULES.forEach((w) => this.addUncountable(w));
+    SINGULAR_RULES.forEach(([p, r]) => this.addSingularRule(p, r));
+    PLURAL_RULES.forEach(([p, r]) => this.addPluralRule(p, r));
+    IRREGULAR_PAIRS.forEach(([s, p]) => this.addIrregular(s, p));
   }
 }
 
-// ========================
-// DEFAULT INSTANCE EXPORT
-// ========================
 export const pluralize = new Pluralizer();
