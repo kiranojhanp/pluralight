@@ -1,7 +1,7 @@
 {
   "module": "src/index.ts",
   "name": "pluralight",
-  "version": "0.0.0",
+  "version": "0.0.1-beta.1",
   "type": "module",
   "exports": {
     ".": {
