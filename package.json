@@ -12,7 +12,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "npx tsx ./src/test.ts",
-    "release": "npx bumpp --commit --push --tag --recursive"
+    "release": "npx bumpp --commit --push --tag --recursive && npm publish"
   },
   "devDependencies": {
     "@types/bun": "latest",
