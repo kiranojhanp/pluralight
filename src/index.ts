@@ -96,6 +96,22 @@ export class Pluralizer {
     return transformed.toLowerCase();
   }
 
+  /**
+   * Replaces placeholders ($1, $2, etc.) in a string with corresponding match groups
+   * @example replacePlaceholders("Hello $1", ["World", "Unused"]) → "Hello World"
+   */
+  private replacePlaceholders(
+    template: string,
+    matches: RegExpMatchArray
+  ): string {
+    let result = template;
+    for (let i = 1; i < matches.length; i++) {
+      const placeholder = new RegExp(`\\$${i}`, "g");
+      result = result.replace(placeholder, matches[i] || "");
+    }
+    return result;
+  }
+
   /** Apply regex replacement with capture group support */
   private applyRule(
     word: string,
@@ -107,7 +123,7 @@ export class Pluralizer {
 
     let result = replacement;
     for (let i = 1; i < match.length; i++) {
-      result = result.replace(new RegExp(`\\$${i}`, "g"), match[i] || "");
+      result = this.replacePlaceholders(result, match);
     }
 
     return this.restoreCase(match[0], result);
